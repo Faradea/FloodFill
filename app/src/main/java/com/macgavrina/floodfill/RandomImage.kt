@@ -2,20 +2,34 @@ package com.macgavrina.floodfill
 
 import android.content.Context
 import android.graphics.*
+import android.os.Handler
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import io.reactivex.Flowable
+import io.reactivex.Scheduler
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
+import io.reactivex.subjects.PublishSubject
 import java.util.*
+import io.reactivex.subjects.ReplaySubject
+import androidx.core.os.HandlerCompat.postDelayed
+import android.widget.Toast
+import io.reactivex.Observable
+
 
 class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
     private val paint = Paint()
     private val defaultColor = Color.BLACK
     private var bitmap: Bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
+    private var bitmapForCalculations: Bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
     private var scale = 1f
     private var fillInProgress = false
     private var pointsQueue = ArrayDeque<PointWithColor>()
     private var checkedPointsList = mutableListOf<Boolean>()
+    private val source = PublishSubject.create<Bitmap>()
+    private var bitmapList = mutableListOf<Bitmap>()
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
@@ -39,9 +53,9 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
         //if (pointWithColor.x >= bitmap.width || pointWithColor.x < 0 || pointWithColor.y >= bitmap.height || pointWithColor.y < 0) return
 
-        if (bitmap.getPixel(pointWithColor.x, pointWithColor.y) != pointWithColor.colorId) return
+        if (bitmapForCalculations.getPixel(pointWithColor.x, pointWithColor.y) != pointWithColor.colorId) return
 
-        bitmap.setPixel(pointWithColor.x, pointWithColor.y, defaultColor)
+        bitmapForCalculations.setPixel(pointWithColor.x, pointWithColor.y, defaultColor)
 
         checkAndAddPointToQueue(PointWithColor(pointWithColor.x-1, pointWithColor.y, pointWithColor.colorId))
         checkAndAddPointToQueue(PointWithColor(pointWithColor.x+1, pointWithColor.y, pointWithColor.colorId))
@@ -64,6 +78,8 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
         if (fillInProgress) return
 
         fillInProgress = true
+        bitmapForCalculations = bitmap
+        bitmapList.clear()
 
         checkedPointsList = (List(bitmap.width * bitmap.height) {false}).toMutableList()
 
@@ -73,13 +89,62 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
         //ToDo Перенести вычисления из UI потока
         pointsQueue.add(PointWithColor((x/scale).toInt(), (y/scale).toInt(), color))
 
-
+        var count = 0
 
         while (pointsQueue.isNotEmpty()) {
+                if (count % 1000 == 0) {
+                    val copy = Bitmap.createBitmap(bitmapForCalculations)
+                    bitmapList.add(copy)
+                }
+            count = count + 1
             fillRecursive(pointsQueue.poll())
         }
+        val copy = Bitmap.createBitmap(bitmapForCalculations)
+        bitmapList.add(copy)
+
+        Log.d("MyApp", "Bitmap list size, ${bitmapList.size}")
+        //invalidate()
+
         fillInProgress = false
-        invalidate()
+
+        //subscriptionToFillResults.onComplete()
+        //invalidate()
+
+        bitmapList.forEach {currentBitmapStamp ->
+            Handler().postDelayed(object : Runnable {
+                    override fun run() {
+                        Observable.just(currentBitmapStamp)
+                            .observeOn(AndroidSchedulers.mainThread())
+                            .subscribeOn(Schedulers.computation())
+                            .subscribe {
+                                Log.d("MyApp", "onNext flowable")
+                                bitmap = currentBitmapStamp
+                                invalidate()
+                            }
+                    }
+                }, 1000)
+
+
+        }
+
+//        Flowable.fromIterable(bitmapList)
+//            .observeOn(AndroidSchedulers.mainThread())
+//            .subscribeOn(Schedulers.computation())
+//            .subscribe {
+//
+//                //                Log.d("MyApp", "onNext flowable")
+////                bitmap = it
+////                invalidate()
+//
+//                Handler().postDelayed(object : Runnable {
+//                    override fun run() {
+//                        Log.d("MyApp", "onNext flowable")
+//                        bitmap = it
+//                        invalidate()
+//                    }
+//                }, 0)
+//            }
+
     }
 
     fun generateNewImage(width: Int, height: Int) {
@@ -112,3 +177,4 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
         invalidate()
     }
 }
+
