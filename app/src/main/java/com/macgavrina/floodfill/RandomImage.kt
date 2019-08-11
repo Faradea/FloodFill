@@ -91,10 +91,23 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
         var count = 0
 
+        source
+            .subscribeOn(Schedulers.computation())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe {currentBitmapStamp ->
+                Log.d("MyApp", "onNext flowable")
+                bitmap = currentBitmapStamp
+                invalidate()
+            }
+
         while (pointsQueue.isNotEmpty()) {
                 if (count % 1000 == 0) {
                     val copy = Bitmap.createBitmap(bitmapForCalculations)
-                    bitmapList.add(copy)
+                    //bitmapList.add(copy)
+                    Thread.sleep(1000)
+                    Log.d("MyApp", "after sleep")
+                    source.onNext(copy)
+                    invalidate()
                 }
             count = count + 1
             fillRecursive(pointsQueue.poll())
@@ -110,22 +123,22 @@ class RandomImage(context: Context?, attrs: AttributeSet?) : View(context, attrs
         //subscriptionToFillResults.onComplete()
         //invalidate()
 
-        bitmapList.forEach {currentBitmapStamp ->
-            Handler().postDelayed(object : Runnable {
-                    override fun run() {
-                        Observable.just(currentBitmapStamp)
-                            .observeOn(AndroidSchedulers.mainThread())
-                            .subscribeOn(Schedulers.computation())
-                            .subscribe {
-                                Log.d("MyApp", "onNext flowable")
-                                bitmap = currentBitmapStamp
-                                invalidate()
-                            }
-                    }
-                }, 1000)
-
-
-        }
+//        bitmapList.forEach {currentBitmapStamp ->
+//            Handler().postDelayed(object : Runnable {
+//                    override fun run() {
+//                        Observable.just(currentBitmapStamp)
+//                            .observeOn(AndroidSchedulers.mainThread())
+//                            .subscribeOn(Schedulers.computation())
+//                            .subscribe {
+//                                Log.d("MyApp", "onNext flowable")
+//                                bitmap = currentBitmapStamp
+//                                invalidate()
+//                            }
+//                    }
+//                }, 1000)
+//
+//
+//        }
 
 //        Flowable.fromIterable(bitmapList)
 //            .observeOn(AndroidSchedulers.mainThread())
